@@ -1,0 +1,239 @@
+# Start with ESPHome 2026.8.2; see README.md for installation and calibration.
+substitutions:
+  node_name: water-heater-led
+  friendly_name: Water Heater
+  led_green_threshold: "8"
+  camera_exposure: "100"
+  # Set false temporarily to expose minutely numeric calibration diagnostics.
+  diagnostics_internal: "true"
+
+esphome:
+  name: ${node_name}
+  friendly_name: ${friendly_name}
+  project:
+    name: xagon0.esphome-water-heater-status
+    version: "0.1.0"
+  min_version: 2026.8.2
+  includes:
+    - blink_decoder.h
+    - led_camera.h
+  on_boot:
+    priority: -100
+    then:
+      # Use the web requester for local analysis (no web camera server is configured).
+      # IDLE would broadcast every analysis frame to all API subscribers.
+      - lambda: id(burner_cam).start_stream(esphome::camera::WEB_REQUESTER);
+
+esp32:
+  board: esp-wrover-kit
+  framework:
+    type: esp-idf
+
+psram:
+  mode: quad
+  speed: 40MHz
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: !secret burner_camera_api_key
+  on_client_connected:
+    - if:
+        condition:
+          lambda: return client_info.rfind("Home Assistant", 0) == 0;
+        then:
+          # Seed HA's preview after it subscribes; subsequent images are requested.
+          - delay: 2s
+          - lambda: id(burner_cam).request_image(esphome::camera::IDLE);
+
+ota:
+  - platform: esphome
+    password: !secret burner_camera_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  # If mDNS does not cross your VLANs, add use_address with your device IP.
+
+# Freenove ESP32-WROVER camera pinout, not AI-Thinker ESP32-CAM.
+i2c:
+  id: camera_bus
+  sda: GPIO26
+  scl: GPIO27
+  scan: false
+
+esp32_camera:
+  id: burner_cam
+  name: Status LED view
+  entity_category: diagnostic
+  disabled_by_default: true
+  external_clock:
+    pin: GPIO21
+    frequency: 20MHz
+  i2c_id: camera_bus
+  data_pins: [GPIO4, GPIO5, GPIO18, GPIO19, GPIO36, GPIO39, GPIO34, GPIO35]
+  vsync_pin: GPIO25
+  href_pin: GPIO23
+  pixel_clock_pin: GPIO22
+  resolution: 160x120
+  pixel_format: jpeg
+  jpeg_quality: 10
+  frame_buffer_count: 2
+  max_framerate: 30 fps
+  idle_framerate: 0 fps
+  vertical_flip: false
+  horizontal_mirror: false
+  # Keep exposure/gain fixed so flashes do not change the whole image.
+  # Exposure is adjustable in HA for initial setup.
+  aec_mode: manual
+  aec_value: ${camera_exposure}
+  agc_mode: manual
+  agc_value: 0
+  wb_mode: office
+  on_image:
+    then:
+      - lambda: |-
+          led_camera.process(image.data, image.length, millis(),
+                             id(led_threshold).state,
+                             id(classification_enabled).state);
+
+switch:
+  - platform: template
+    id: classification_enabled
+    name: Classification enabled
+    entity_category: config
+    disabled_by_default: true
+    icon: mdi:check-decagram
+    optimistic: true
+    # Calibration is retained across reboots; bad/missing frames reset acquisition.
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: led_camera.reset();
+    turn_off_action:
+      - lambda: led_camera.reset();
+
+number:
+  - platform: template
+    id: led_threshold
+    name: LED green threshold
+    entity_category: config
+    disabled_by_default: true
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: ${led_green_threshold}
+    restore_value: true
+    optimistic: true
+    set_action:
+      - lambda: led_camera.reset();
+  - platform: template
+    id: camera_exposure
+    name: Camera exposure
+    entity_category: config
+    disabled_by_default: true
+    min_value: 1
+    max_value: 1200
+    step: 1
+    initial_value: ${camera_exposure}
+    # Manual camera settings reset at boot, so this matches that default.
+    optimistic: true
+    set_action:
+      - lambda: |-
+          id(burner_cam).set_aec_value(uint32_t(x));
+          id(burner_cam).update_camera_parameters();
+          led_camera.reset();
+
+sensor:
+  - platform: template
+    name: LED green signal
+    internal: ${diagnostics_internal}
+    entity_category: diagnostic
+    accuracy_decimals: 1
+    update_interval: 60s
+    # Report the peak across the last minute; local frame processing stays fast.
+    lambda: return led_camera.take_peak();
+    filters:
+      - round: 1
+      - delta: 0.1
+  - platform: template
+    name: Camera analyzed frames per second
+    internal: ${diagnostics_internal}
+    entity_category: diagnostic
+    unit_of_measurement: fps
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: return led_camera.frame_rate(millis());
+    filters:
+      - round: 1
+      - delta: 0.1
+  - platform: template
+    name: Last LED flash interval
+    internal: ${diagnostics_internal}
+    entity_category: diagnostic
+    unit_of_measurement: s
+    accuracy_decimals: 2
+    update_interval: 60s
+    lambda: return led_camera.last_interval / 1000.0f;
+    filters:
+      - round: 2
+      - delta: 0.01
+  - platform: template
+    name: Last LED flash width
+    internal: ${diagnostics_internal}
+    entity_category: diagnostic
+    unit_of_measurement: ms
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: return led_camera.last_width;
+    filters:
+      - round: 0
+      - delta: 1
+  - platform: template
+    name: LED flash count
+    internal: ${diagnostics_internal}
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: return led_camera.pulse_count;
+    filters:
+      - round: 0
+      - delta: 1
+  - platform: template
+    name: Camera frame gaps
+    accuracy_decimals: 0
+    internal: ${diagnostics_internal}
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: return led_camera.long_gaps;
+    filters:
+      - round: 0
+      - delta: 1
+  - platform: wifi_signal
+    name: Wi-Fi signal
+    internal: ${diagnostics_internal}
+    entity_category: diagnostic
+    update_interval: 60s
+    filters:
+      - delta: 1
+
+text_sensor:
+  - platform: template
+    id: reported_state
+    name: Status
+    icon: mdi:water-boiler
+    # This is local polling. Publish only when the interpreted state changes.
+    update_interval: 250ms
+    lambda: |-
+      const uint32_t now = millis();
+      const char *current = "Unknown";
+      if (led_camera.image_error == nullptr && id(classification_enabled).state) {
+        const char *pattern = led_camera.decoder.state(now);
+        if (led_camera.fault_decoder.active(now)) current = "Fault";
+        else if (strcmp(pattern, "Heating") == 0) current = "Running";
+        else if (strcmp(pattern, "Standby") == 0) current = "Not running";
+      }
+      if (id(reported_state).has_state() && id(reported_state).state == current) return {};
+      return {current};

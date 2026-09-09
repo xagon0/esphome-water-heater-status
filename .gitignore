@@ -1,0 +1,23 @@
+# Local credentials, ESPHome outputs and private captures
+secrets.yaml
+secrets.*.yaml
+!secrets.example.yaml
+.esphome/
+.venv/
+.build/
+.pio/
+__pycache__/
+*.pyc
+*.bin
+*.elf
+*.dSYM/
+*.log
+*.jpg
+*.jpeg
+*.png
+*.zip
+*.tar.gz
+dist/
+private*/
+deployment.json
+.DS_Store
