@@ -7,7 +7,7 @@ Read a water heater's external green status LED with an ESP32 camera and expose 
 
 The ESP32 classifies the flashes locally. Home Assistant receives **Running**, **Not running**, **Fault**, or **Unknown** when the interpretation changes. No cloud service, image model, or HA automation is required for detection.
 
-**v0.1.0 is an experimental prerelease.** The included decoder targets the Honeywell/Resideo **WT8840 single-flash / rapid-strobe pattern**. Check your control's manual before using it; a similar-looking valve or another Bradford White ICON generation can use different codes. See [compatibility and validation](docs/compatibility.md).
+**v0.2.0 is an experimental prerelease.** The included decoder targets the Honeywell/Resideo **WT8840 single-flash / rapid-strobe pattern**. Check your control's manual before using it; a similar-looking valve or another Bradford White ICON generation can use different codes. See [compatibility and validation](docs/compatibility.md).
 
 ## What you get
 
@@ -31,7 +31,7 @@ The indicator reports the control's state. This project does not independently v
 
 ## Install
 
-1. Download the [v0.1.0 source release](https://github.com/xagon0/esphome-water-heater-status/releases/tag/v0.1.0), or clone this repository. Keep `water-heater.yaml`, `blink_decoder.h`, and `led_camera.h` together.
+1. Download the [v0.2.0 source release](https://github.com/xagon0/esphome-water-heater-status/releases/tag/v0.2.0), or clone this repository. Keep `water-heater.yaml` and all four `.h` files together.
 2. Copy `secrets.example.yaml` to `secrets.yaml` and fill in your Wi-Fi details, a unique OTA password, and a new API encryption key. Generate a key locally with `openssl rand -base64 32`. The example key is a placeholder and will not validate.
 3. Adjust the substitutions at the top of `water-heater.yaml` if needed. Each device needs a unique `node_name`. The defaults name the HA device **Water Heater** and its primary entity **Status**, normally `sensor.water_heater_status` (HA may add a suffix if that ID is taken).
 4. Compile and flash over USB, then add the discovered device through **Settings → Devices & services → ESPHome** using the API key from your own secrets file.
@@ -39,7 +39,7 @@ The indicator reports the control's state. This project does not independently v
 
 ### ESPHome Device Builder
 
-Put the YAML and both headers in your Device Builder configuration directory (normally `/config/esphome/`). Merge the four keys from `secrets.example.yaml` into your existing `secrets.yaml`; keep any unrelated entries. Install `water-heater.yaml` through Device Builder. If the board is plugged into a different computer, use its browser-connected USB installation option or download the factory image for that computer.
+Put the YAML and all four headers in your Device Builder configuration directory (normally `/config/esphome/`). Merge the four keys from `secrets.example.yaml` into your existing `secrets.yaml`; keep any unrelated entries. Install `water-heater.yaml` through Device Builder. If the board is plugged into a different computer, use its browser-connected USB installation option or download the factory image for that computer.
 
 ### Command line
 
@@ -67,6 +67,10 @@ Local image analysis targets 30 fps; the original mounted board achieved about 2
 
 A 60-second stable-state measurement of the original deployment recorded zero repeated state updates and zero images after connection warmup. That is a measured example, not a network bandwidth guarantee.
 
+## Capture transitions
+
+The ESP32 can retain short pulse-timing windows around every status change and export them on request. Use the included collector to investigate Unknown periods across multiple natural heating cycles without adding HA telemetry. See [transition capture](docs/transition-capture.md) for retention limits, setup and the trace format.
+
 ## Modify and contribute
 
 `water-heater.yaml` contains the board, camera and HA configuration. `led_camera.h` extracts a green signal from a 20×15 overview of a 160×120 JPEG. `blink_decoder.h` contains hardware-independent timing decoders and is the starting point for another control's blink scheme.
@@ -75,6 +79,7 @@ Run the host tests with `bash tools/test.sh`. See [CONTRIBUTING.md](CONTRIBUTING
 
 ## Documentation
 
+- [Transition capture and cycle analysis](docs/transition-capture.md)
 - [Calibration and troubleshooting](docs/calibration.md)
 - [Supported patterns, board pinout and validation limits](docs/compatibility.md)
 - [Changelog](CHANGELOG.md)

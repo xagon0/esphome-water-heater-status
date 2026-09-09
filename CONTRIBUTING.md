@@ -6,6 +6,7 @@ Fork the repository and open a pull request. Small, documented changes are welco
 
 ```sh
 bash tools/test.sh
+python3 -m unittest discover -s tests -p 'test_*.py'
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt

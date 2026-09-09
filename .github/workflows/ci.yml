@@ -19,6 +19,8 @@ jobs:
         env:
           CXX: clang++
         run: bash tools/test.sh
+      - name: Test cycle analysis
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
 
   firmware:
     runs-on: ubuntu-latest

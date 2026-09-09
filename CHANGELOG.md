@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 — 2026-09-08
+
+- Passive PSRAM capture of 15-second pre-transition and 20-second post-transition windows.
+- Raw pulse timing, decoder group observations, frame gaps and Unknown reasons.
+- Read-only paginated API export with no additional HA entities or background uploads.
+- Local collector, complete-cycle summary, retention/overflow markers and tests.
+- Existing normal/fault classification behavior retained.
+
 ## 0.1.0 — 2026-09-08
 
 Initial experimental public release.

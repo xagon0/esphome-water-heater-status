@@ -20,4 +20,11 @@ __pycache__/
 dist/
 private*/
 deployment.json
+connection.json
+*.connection.json
+captures/
+traces/
+collection/
+collector-state.json
+summary.json
 .DS_Store

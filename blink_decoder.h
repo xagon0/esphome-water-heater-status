@@ -1,10 +1,17 @@
 #pragma once
 #include <cstdint>
 
+struct GroupObservation {
+  uint32_t sequence{0}, period{0};
+  uint8_t flashes{0}, streak{0}, confirmed{0};
+  bool valid{false};
+};
+
 // WT8840-family interpretation: single flash ~3 s = idle; rapid double
 // strobe ~3 s = call for heat. This is the control's report, not flame proof.
 class BlinkDecoder {
  public:
+  const GroupObservation &observation() const { return observation_; }
   void reset() {
     initialized_ = have_group_ = pending_ = high_ = false;
     streak_ = kind_ = flashes_ = confirmed_ = 0;
@@ -76,6 +83,9 @@ class BlinkDecoder {
     // Irregular timing, extra flashes, frame loss and silence still clear it.
     if (!candidate || (group_period_ && (group_period_ < 2700 || group_period_ > 3600))) confirmed_ = 0;
     if (streak_ >= 4) confirmed_ = kind_;
+    observation_ = {observation_.sequence+1, group_period_, uint8_t(flashes_),
+                    uint8_t(streak_), uint8_t(confirmed_),
+                    bool(candidate && (!group_period_ || (group_period_>=2700 && group_period_<=3600)))};
     state_ = confirmed_ ? (confirmed_ == 1 ? "Standby" : "Heating") : "Acquiring / unrecognized pattern";
   }
   void expire(uint32_t now) {
@@ -84,6 +94,7 @@ class BlinkDecoder {
       streak_ = kind_ = confirmed_ = 0;
     }
   }
+  GroupObservation observation_{};
   bool initialized_{false}, have_group_{false}, pending_{false}, high_{false};
   unsigned streak_{0}, kind_{0}, flashes_{0}, confirmed_{0};
   uint32_t last_frame_{0}, last_edge_{0}, high_since_{0}, group_start_{0}, group_period_{0};
@@ -94,6 +105,7 @@ class BlinkDecoder {
 // normal heating strobe with two slow (one-second-spaced) fault flashes.
 class FaultDecoder {
  public:
+  const GroupObservation &observation() const { return observation_; }
   void reset() {
     initialized_ = high_ = pending_ = have_edge_ = false;
     count_ = streak_ = code_ = 0;
@@ -109,6 +121,7 @@ class FaultDecoder {
       high_since_ = now;
       if (!pending_) {
         const uint32_t gap = now - last_edge_;
+        observed_gap_ = have_edge_ ? gap : 0;
         gap_valid_ = !have_edge_ || (gap >= 2500 && gap <= 4500);
         pending_ = slow_ = true;
         count_ = 1;
@@ -142,7 +155,11 @@ class FaultDecoder {
     } else {
       streak_ = code_ = 0;
     }
+    observation_ = {observation_.sequence+1, observed_gap_, uint8_t(count_),
+                    uint8_t(streak_), uint8_t(code_), bool(slow_ && gap_valid_ && known(count_))};
   }
+  GroupObservation observation_{};
+  uint32_t observed_gap_{0};
   bool initialized_{false}, high_{false}, pending_{false}, have_edge_{false};
   bool slow_{false}, gap_valid_{false};
   unsigned count_{0}, streak_{0}, code_{0};

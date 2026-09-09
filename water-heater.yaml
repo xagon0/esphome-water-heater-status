@@ -12,9 +12,11 @@ esphome:
   friendly_name: ${friendly_name}
   project:
     name: xagon0.esphome-water-heater-status
-    version: "0.1.0"
+    version: "0.2.0"
   min_version: 2026.8.2
   includes:
+    - transition_recorder.h
+    - trace_export.h
     - blink_decoder.h
     - led_camera.h
   on_boot:
@@ -22,7 +24,9 @@ esphome:
     then:
       # Use the web requester for local analysis (no web camera server is configured).
       # IDLE would broadcast every analysis frame to all API subscribers.
-      - lambda: id(burner_cam).start_stream(esphome::camera::WEB_REQUESTER);
+      - lambda: |-
+          trace_capture.setup();
+          id(burner_cam).start_stream(esphome::camera::WEB_REQUESTER);
 
 esp32:
   board: esp-wrover-kit
@@ -37,6 +41,17 @@ logger:
   level: INFO
 
 api:
+  actions:
+    # Read-only, encrypted, paginated export. No extra HA entity or background stream.
+    - action: get_transition_trace
+      supports_response: only
+      variables:
+        sequence: int
+        offset: int
+      then:
+        - api.respond:
+            data: !lambda |-
+              trace_capture.export_page(root, sequence, offset);
   encryption:
     key: !secret burner_camera_api_key
   on_client_connected:
@@ -229,11 +244,14 @@ text_sensor:
     lambda: |-
       const uint32_t now = millis();
       const char *current = "Unknown";
+      const char *reason = led_camera.image_error ? led_camera.image_error : "Classification disabled";
       if (led_camera.image_error == nullptr && id(classification_enabled).state) {
         const char *pattern = led_camera.decoder.state(now);
+        reason = pattern;
         if (led_camera.fault_decoder.active(now)) current = "Fault";
         else if (strcmp(pattern, "Heating") == 0) current = "Running";
         else if (strcmp(pattern, "Standby") == 0) current = "Not running";
       }
+      trace_capture.observe(now, current, reason, led_camera.fault_decoder.code(), id(led_threshold).state);
       if (id(reported_state).has_state() && id(reported_state).state == current) return {};
       return {current};
